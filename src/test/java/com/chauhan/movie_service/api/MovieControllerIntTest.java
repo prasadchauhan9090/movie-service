@@ -1,7 +1,10 @@
 package com.chauhan.movie_service.api;
 
+
 import com.chauhan.movie_service.model.Movie;
+import com.chauhan.movie_service.repo.MovieRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -11,10 +14,13 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
 
+import static net.bytebuddy.matcher.ElementMatchers.is;
 import static org.hamcrest.Matchers.notNullValue;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.hibernate.Hibernate.get;
+import static org.springframework.mock.http.server.reactive.MockServerHttpRequest.post;
+import static org.springframework.mock.http.server.reactive.MockServerHttpRequest.put;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
@@ -22,29 +28,95 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class MovieControllerIntTest {
 
     @Autowired
-    private MockMvc mockMvc;
+    MockMvc mockMvc;
 
     @Autowired
-    private ObjectMapper objectMapper;
+    ObjectMapper objectMapper;
+
+    @Autowired
+    MovieRepository movieRepository;
+
+    @BeforeEach
+    void cleanUp() {
+        movieRepository.deleteAll();
+    }
 
     @Test
     void givenMovie_whenCreateMovie_thenReturnSavedMovie() throws Exception {
 
+        // Given
         Movie movie = new Movie();
-        movie.setName("RRR");
-        movie.setDirector("S. S. Rajamouli");
-        movie.setActors(List.of("NTR", "Ram Charan", "Alia Bhatt"));
+        movie.setName("rrr");
+        movie.setDirector("ss rajamouli");
+        movie.setActors(List.of("ntr", "ramcharan", "aliabhatt"));
 
-        mockMvc.perform(post("/movies")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(movie)))
-                .andDo(print())
+        //When create movie
+        var response = mockMvc.perform(post("/movies")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(movie)));
+
+        //Then verify saved movie
+        response.andDo(print())
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id", notNullValue()))
-                .andExpect(jsonPath("$.name").value("RRR"))
-                .andExpect(jsonPath("$.director").value("S. S. Rajamouli"))
-                .andExpect(jsonPath("$.actors[0]").value("NTR"))
-                .andExpect(jsonPath("$.actors[1]").value("Ram Charan"))
-                .andExpect(jsonPath("$.actors[2]").value("Alia Bhatt"));
+                .andExpect(jsonPath("$.id", is(notNullValue())))
+                .andExpect(jsonPath("$.name", is(movie.getName())))
+                .andExpect(jsonPath("$.director", is(movie.getDirector())))
+                .andExpect(jsonPath("$.actors", is(movie.getActors())));
+    }
+
+    @Test
+    void givenMovieId_whenFetchMovie_thenReturnMovie() throws Exception {
+        // Given
+        Movie movie = new Movie();
+        movie.setName("rrr");
+        movie.setDirector("ss rajamouli");
+        movie.setActors(List.of("ntr", "ramcharan", "aliabhatt"));
+
+        Movie savedMovie = movieRepository.save(movie);
+
+        // When
+        var response = mockMvc.perform(get("/movies/" + savedMovie.getId()));
+
+        //Then verify saved movie
+        response.andDo(print())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id", is(savedMovie.getId().intValue())))
+                .andExpect(jsonPath("$.name", is(movie.getName())))
+                .andExpect(jsonPath("$.director", is(movie.getDirector())))
+                .andExpect(jsonPath("$.actors", is(movie.getActors())));
+    }
+
+
+    @Test
+    void givenSavedMovie_WhenUpdateMovie_thenMovieUpdatedInDb() throws Exception {
+
+        // Given
+        Movie movie = new Movie();
+        movie.setName("rrr");
+        movie.setDirector("ss rajamouli");
+        movie.setActors(List.of("ntr", "ramcharan", "aliabhatt"));
+
+        Movie savedMovie = movieRepository.save(movie);
+        Long id = savedMovie.getId();
+
+        // update movie
+        movie.setActors(List.of("ntr", "ramcharan", "aliabhatt", "ajaydevgan"));
+
+        var response = mockMvc.perform(put("/movies/" + id)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(movie)));
+
+        //Then verify updated movie
+        response.andDo(print())
+                .andExpect(status().isOk());
+
+        var fetchResponse = mockMvc.perform(get("/movies/" + id));
+
+        fetchResponse.andDo(print())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name", is(movie.getName())))
+                .andExpect(jsonPath("$.director", is(movie.getDirector())))
+                .andExpect(jsonPath("$.actors", is(movie.getActors())));
+
     }
 }
